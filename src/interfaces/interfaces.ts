@@ -15,6 +15,7 @@ export interface Equipo {
 export interface Params {
     subject: string;
     to: { email: string; name: string }[];
+    senderemail: string;
     htmlContent: string;
 }
 

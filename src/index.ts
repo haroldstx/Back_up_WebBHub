@@ -29,16 +29,40 @@ POST: Se utiliza para crear un nuevo recurso en el servidor.
 DELETE: Se utiliza para eliminar un recurso existente en el servidor.
 */
 
-//Ruta para los correos
-app.post('/sendemail', async (req: Request<{}, {}, Params>, res: Response) => {
-    const { subject, to, htmlContent } = req.body;
 
-    if (!subject || !to || !htmlContent) {
+// Hashmap que guarda los códigos de verificación y su fecha de expiración
+let codes: Map<string, { code: string, valid_until: number }> = new Map();
+
+//RUTA PARA ACTUALIZAR LA CONTRASENA DE UN USUARIO
+app.put('/update-password/:id', async (req, res) => {
+    const { id } = req.params;
+    const { contrasena } = req.body;
+    let connection;
+    try {
+        connection = await connectDB();
+        const [result] = await connection.execute('UPDATE Usuario SET contrasena = ? WHERE id = ?', [contrasena, id]) as [ResultSetHeader, any];
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        return res.status(200).json({ message: 'User updated successfully' });
+    } catch (error) {
+        console.error('Database operation failed:', error);
+        return res.status(500).json({ error: 'Database operation failed' });
+    } finally {
+        if (connection) await connection.end();
+    }
+});
+
+//Ruta para los correos
+app.post('/send-email', async (req: Request<{}, {}, Params>, res: Response) => {
+    const { subject, to, senderemail, htmlContent } = req.body;
+
+    if (!subject || !to || !senderemail || !htmlContent) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
 
     try {
-        await SendEmail({ subject, to, htmlContent });
+        await SendEmail({ subject, to, senderemail, htmlContent });
         return res.status(200).json({ message: 'Email sent successfully' });
     } catch (error) {
         console.error('Failed to send email:', error);
@@ -62,7 +86,7 @@ app.get('/contests', async (req: Request, res: Response) => {
 });
 
 //RUTA PARA CREAR CONCURSO
-app.post('/createcontest', async (req: Request<{}, {}, Concurso>, res: Response) => {
+app.post('/create-contest', async (req: Request<{}, {}, Concurso>, res: Response) => {
     const { id, nombre, descripcion, fecha_inicio, fecha_fin, foto_perfil, banner, interno } = req.body;
 
     if (!id || !nombre || !descripcion || !fecha_inicio || !fecha_fin || interno === undefined) {
@@ -90,7 +114,7 @@ app.post('/createcontest', async (req: Request<{}, {}, Concurso>, res: Response)
 });
 
 //RUTA PARA BORRAR UN USUARIO POR ID
-app.delete('/deleteuser/:id', async (req, res) => {
+app.delete('/delete-user/:id', async (req, res) => {
     const { id } = req.params;
     let connection;
     try {
@@ -109,20 +133,6 @@ app.delete('/deleteuser/:id', async (req, res) => {
     }
 });
 
-//RUTA PARA OBTENER CANTIDAD TOTAL DE USUARIOS (PARA ASIGNARSELOS A ID)
-app.get('/totalusers', async (req, res) => {
-    let connection;
-    try {
-        connection = await connectDB();
-        const [rows] = await connection.execute('SELECT COUNT(*) as total FROM Usuario') as [RowDataPacket[], any];
-        return res.status(200).json(rows[0]);
-    } catch (error) {
-        console.error('Database operation failed:', error);
-        return res.status(500).json({ error: 'Database operation failed' });
-    } finally {
-        if (connection) await connection.end();
-    }
-});
 
 //RUTA PARA INICIAR SESION Y OBTENER EL USUARIO
 app.post('/login', async (req: Request<{}, {}, { correo: string, contrasena: string }>, res: Response) => {
@@ -154,7 +164,8 @@ app.post('/login', async (req: Request<{}, {}, { correo: string, contrasena: str
 });
 
 //RUTA PARA OBTENER TODOS LOS USUARIOS QUE SON DE UNITEC
-app.get('/usersunitec', async (req, res) => {
+// TODO: Una ruta "/users/:org" para generalizar?
+app.get('/users-unitec', async (req, res) => {
     let connection;
     try {
         connection = await connectDB();
@@ -169,12 +180,12 @@ app.get('/usersunitec', async (req, res) => {
 });
 
 //:id es el parametro que se le pasara por la url
-app.get('/userbyid/:id', async (req, res) => {
+app.get('/get-user-by-id/:id', async (req, res) => {
     const { id } = req.params;
     let connection;
     try {
         connection = await connectDB();
-        const [rows] = await connection.execute('SELECT nombre FROM Usuario WHERE id = ?', [id]) as [Usuario[],any];
+        const [rows] = await connection.execute('SELECT nombre FROM Usuario WHERE id = ?', [id]) as [Usuario[], any];
         if (rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -188,7 +199,7 @@ app.get('/userbyid/:id', async (req, res) => {
 });
 
 //RUTA PARA CAMBIAR LA CARRERA DE UN USUARIO POR ID
-app.put('/changecareer/:id', async (req, res) => {
+app.put('/change-career/:id', async (req, res) => {
     const { id } = req.params;
     const { carrera } = req.body;
     let connection;
@@ -208,7 +219,7 @@ app.put('/changecareer/:id', async (req, res) => {
 });
 
 //RUTA PARA OBTENER TODOS LOS USUARIOS EXISTENTES EN LA BASE DE DATOS
-app.get('/allusers', async (req, res) => {
+app.get('/users', async (req, res) => {
     let connection;
     try {
         connection = await connectDB();
@@ -223,7 +234,7 @@ app.get('/allusers', async (req, res) => {
 });
 
 //RUTA PARA AGREGAR UN USUARIO A LA BASE DE DATOS
-app.post('/adduser', async (req: Request<{}, {}, Omit<Usuario, 'id'>>, res: Response) => {
+app.post('/add-user', async (req: Request<{}, {}, Omit<Usuario, 'id'>>, res: Response) => {
     const { nombre, correo, contrasena, tipo, carrera, bio, foto_perfil } = req.body;
 
     if (!nombre || !correo || !contrasena || typeof tipo !== 'number') {
@@ -234,23 +245,17 @@ app.post('/adduser', async (req: Request<{}, {}, Omit<Usuario, 'id'>>, res: Resp
     try {
         connection = await connectDB();
 
-        // Obtener la cantidad total de usuarios para calcular el ID
-        const [totalRows] = await connection.execute('SELECT COUNT(*) as total FROM Usuario') as [RowDataPacket[], any];
-        const totalUsers = totalRows[0].total;
-
-        // Asignar el nuevo ID como totalUsers + 1
-        const newUserId = totalUsers + 1;
-
-        // Insertar el nuevo usuario con el ID generado
         const query = `
-            INSERT INTO Usuario (id, nombre, correo, contrasena, tipo, carrera, bio, foto_perfil)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO Usuario (nombre, correo, contrasena, tipo, carrera, bio, foto_perfil)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         `;
 
         const [result] = await connection.execute(query, [
-            newUserId, nombre, correo, contrasena, tipo, carrera || '', bio || '', foto_perfil || null
+            nombre, correo, contrasena, tipo, carrera || '', bio || '', foto_perfil || null
         ]);
 
+        // Obtener el ID del usuario recién creado
+        const newUserId = (result as ResultSetHeader).insertId;
         await connection.end();
         return res.status(201).json({ message: 'User added successfully', userId: newUserId });
     } catch (error) {
@@ -261,7 +266,30 @@ app.post('/adduser', async (req: Request<{}, {}, Omit<Usuario, 'id'>>, res: Resp
     }
 });
 
-//RUTA PARA ESCUCHAR EL PUERTO DE LA APLICACION
+/*
+Genera un código de verificación de 6 dígitos y lo asocia a un correo.
+*/
+app.post("/gen-code", async (req: Request<{}, {}, { correo: string }>, res: Response) => {
+    const { correo } = req.body;
+    console.log(req.body)
+    const codeData = codes.get(correo);
+    if (codeData !== undefined) {
+        if (codeData.valid_until > Date.now()) {
+            return res.status(400).json({ error: 'Code already generated.', code: codeData.code });
+        }
+    }
+
+    const validTime = 2 * 60 * 1000; // 2 minutos
+    let code = Math.floor(100000 + Math.random() * 900000).toString();
+    let valid_until = Date.now() + (validTime);
+
+    let newCodeData = { code: code, valid_until: valid_until }
+    codes.set(correo, newCodeData);
+
+    console.log(codes)
+    return res.status(200).json(newCodeData);
+});
+
 app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+    console.log(`Server is running on http://localhost:${PORT}`);
 });
