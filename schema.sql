@@ -7,6 +7,7 @@ CREATE TABLE Concurso (
     foto_perfil BLOB,
     banner BLOB,
     interno BOOLEAN
+    Activo BOOLEAN
 );
 
 CREATE TABLE RestriccionesConcurso (
@@ -25,6 +26,7 @@ CREATE TABLE Usuario (
     carrera VARCHAR(255), -- vacío si es externo
     bio TEXT,
     foto_perfil BLOB
+    Activo BOOLEAN
 );
 
 CREATE TABLE Equipo (

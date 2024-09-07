@@ -3,7 +3,7 @@
 **Índice**
 - [GET](#get)
 - [POST](#post)
-- [UPDATE](#update)
+- [PUT](#update)
 - [DELETE](#delete)
 
 # Notas
@@ -17,7 +17,94 @@ Para la verificación de los correos:
 
 # GET
 
+## /contests
+
+Retorna la lista entera de concursos creados.
+
+**Respuesta**
+```json
+{
+	"0": {
+		"nombre": "",
+		"descripcion": "",
+        "fecha_inicio": 0,
+        "fecha_fin": 0,
+        "foto_perfil": "bytes str",
+        "banner": "bytes str",
+        "interno": true
+	},
+    "1": {},
+    "2": {}
+}
+```
+
+## /users-unitec
+Devuelve todos los usuarios de la organización UNITEC.
+
+**Body Respuesta**
+```json
+{
+    "0": {
+        "id": 0,
+        "nombre": "",
+        "correo": "",
+        "contrasena": "",
+        "tipo": "",
+        "carrera": "",
+        "bio": "",
+        "foto_perfil": "bytes str",
+    },
+    "1": {},
+    "2": {}
+}
+```
+
 # POST
+
+## /create-contest
+Registra un concurso en la base de datos
+> Nota: todos los campos deben ser llenados 
+> Nota: El concurso debe ser unico
+
+**Parámetros de Body**
+```json
+{
+    "id": "", 
+    "nombre": "", 
+    "descripcion": "", 
+    "fecha_inicio": "", 
+    "fecha_fin": "", 
+    "foto_perfil": "bytes str", 
+    "banner": "bytes str", 
+    "interno": "boolean"
+}
+```
+**Respuesta**
+
+- `400`
+```json
+{
+    "status": 400,
+    "message": "Missing required files"
+}
+```
+
+- `201`
+```json
+{
+    "status": 201,
+    "message": "contest created successfully"
+}
+```
+
+- `500`
+```json
+{
+    "status": 500,
+    "message": "Database operation failed."
+}
+```
+
 
 ## /adduser
 Registra un usuario en la base de datos.
@@ -97,7 +184,202 @@ Envio de correos
 }
 ```
 
+## /gen-code
+Genera un código de verificación para el registro de un usuario.
+
+**Parámetros de Body**
+```json
+{
+    "correo": ""
+}
+```
+
+**Respuesta**
+
+- `200`
+```json
+{
+    "code": "",
+    "valid_until": 0
+}
+```
+- `400`
+```json
+{
+    "error": "Code already generated.",
+    "code": "",
+}
+```
+## /verify-code
+
+Verifica si un código de verificación es válido.
+
+**Parámetros de Body**
+```json
+{
+    "correo": "",
+    "code": ""
+}
+```
+
+**Respuesta**
+- `200`
+```json
+{
+    "valid": true,
+}
+```
+> Nota: Tambien puede ser false.
+
+- `404`
+```json
+{
+    "error": "Code not found."
+}
+```
+
+# Put 
+
+## /desactivate-contest/:id 
+>Nota: El concurso debe existir 
+>Nota: El concurso puede ser desactivado tanto porque su tiempo acabo como por el hub 
+
+**Parametro por url**
+ id: id contest
+
+ **Respuesta**
+- `200`
+```json
+{
+    "status": 200,
+    "message": "Contest desactivated succesfully"
+}
+```
+
+- `404`
+```json
+{
+    "status": 404,
+    "message": "Contest not found "
+}
+```
+
+- `500`
+```json
+{
+    "status": 500,
+    "message": "Database eperation failed"
+}
+```
+
+## /desactivate-user/:id 
+>Nota: El user debe existir
+
+**Parametro por url**
+ id: id user
+
+ **Respuesta**
+- `200`
+```json
+{
+    "status": 200,
+    "message": "User desactivated succesfully"
+}
+```
+
+- `404`
+```json
+{
+    "status": 404,
+    "message": "USer not found "
+}
+```
+
+- `500`
+```json
+{
+    "status": 500,
+    "message": "Database eperation failed"
+}
+```
+
+## /update-password/:id
+>Nota: El user debe existir
+
+**Parametro por url**
+ id: id user
+
+ **Parámetros de Body**
+```json
+{
+    "contrasena": "" 
+}
+```
+
+ **Respuesta**
+- `200`
+```json
+{
+    "status": 200,
+    "message": "Password changed successfuly"
+}
+```
+
+- `404`
+```json
+{
+    "status": 404,
+    "message": "User not found"
+}
+```
+
+- `500`
+```json
+{
+    "status": 500,
+    "message": "Database eperation failed"
+}
+```
+
+## /change-career/:id
+>Nota: El user debe existir
+>Nota: 
+
+**Parametro por url**
+ id: id user
+
+ **Parámetros de Body**
+```json
+{
+    "carrera": "" 
+}
+```
+
+ **Respuesta**
+- `200`
+```json
+{
+    "status": 200,
+    "message": "Carreer updated"
+}
+```
+
+- `404`
+```json
+{
+    "status": 404,
+    "message": "User not found"
+}
+```
+
+- `500`
+```json
+{
+    "status": 500,
+    "message": "Database eperation failed"
+}
+```
+
 
 # UPDATE
 
-Added .env.example para referencia de .env e informacion para empezar a usar el projecto en readme# DELETE
