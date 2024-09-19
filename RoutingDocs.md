@@ -8,7 +8,7 @@
 
 # Notas
 Para la verificación de los correos:
-1. Generar un código de verificación con `/gen-code` y enviarlo al HTML usando `/send-email`.
+1. Generar un código de verificación con `/gen-code`
 2. Usar `/verify-code` para obtener un `True` o `False` si el código proporcionado es válido.
 3. Si es verdadero, usar `/add-user` para agregar el usuario.
 
@@ -35,6 +35,122 @@ Retorna la lista entera de concursos creados.
 	},
     "1": {},
     "2": {}
+}
+```
+
+# GET 
+
+## /search-contest-by-name/:palabra 
+
+**Parametro por url**
+ palabra: palabra o frase en el nombre
+
+ **Respuesta**
+- `200`
+```json
+{
+    {
+		"nombre": "",
+		"descripcion": "",
+        "fecha_inicio": "0000-00-00T00:00:00.000Z",
+        "fecha_fin": "9999-99-99T99:99:99.999Z",
+        "foto_perfil": "bytes str",
+        "banner": "bytes str",
+        "interno": true,
+        "activo":true
+	},
+    {}
+}
+```
+
+- `400`
+```json
+{
+    "status": 400,
+    "message": "Missing search query"
+}
+```
+
+- `404`
+```json
+{
+    "status": 404,
+    "message":"No contests found"
+}
+```
+
+- `500`
+```json
+{
+    "status": 500,
+    "message": "Database operation failed"
+}
+```
+
+# GET
+## /contests-for-user/:userID
+Esta ruta filtra y retorna la lista de concursos dependiendo del tipo de usuario:
+Si el usuario es interno, retorna todos los concursos (internos y externos).
+Si el usuario es externo, retorna solo los concursos externos.
+
+**Parámetro por URL**
+userId: Identificador único del usuario.
+
+**Respuesta**
+
+- `200` (para usuario interno)
+```json
+{
+    "0": {
+        "nombre": "",
+        "descripcion": "",
+        "fecha_inicio": "0000-00-00T00:00:00.000Z",
+        "fecha_fin": "9999-99-99T99:99:99.999Z",
+        "foto_perfil": "bytes str",
+        "banner": "bytes str",
+        "interno": true,
+        "activo": true
+    },
+    "1": {
+        "nombre": "",
+        "descripcion": "",
+        "fecha_inicio": "0000-00-00T00:00:00.000Z",
+        "fecha_fin": "9999-99-99T99:99:99.999Z",
+        "foto_perfil": "bytes str",
+        "banner": "bytes str",
+        "interno": false,
+        "activo": true
+    }
+}
+```
+-`200` (para usuario externo)
+```json
+{
+    "0": {
+        "nombre": "",
+        "descripcion": "",
+        "fecha_inicio": "0000-00-00T00:00:00.000Z",
+        "fecha_fin": "9999-99-99T99:99:99.999Z",
+        "foto_perfil": "bytes str",
+        "banner": "bytes str",
+        "interno": false,
+        "activo": true
+    },
+    "1": {}
+}
+```
+`404`
+```json
+{
+    "status": 404,
+    "message": "No contests found for user"
+}
+```
+`500`
+```json
+{
+    "status": 500,
+    "message": "Database operation failed"
 }
 ```
 
@@ -144,7 +260,7 @@ Registra un usuario en la base de datos.
 ## /sendemail
 
 Envio de correos
-> Nota: Es necesario que los correos existan, desde el del sender hasta el del receptor
+> Nota: Es necesario que los correos existan
 > Nota: El cuerpo del correo debe ser enviado en un formato html 
 > Nota: El to representa un array, por ende se pueden mandar multiples correos a la vez, sin embargo el sender solo puede ser uno
 
@@ -154,7 +270,6 @@ Envio de correos
     "subject": "",
     "to": 
     [{ "email": "", "name": "" }],
-    "senderemail":"",
     "htmlContent": ""
 }
 ```
@@ -185,12 +300,13 @@ Envio de correos
 ```
 
 ## /gen-code
-Genera un código de verificación para el registro de un usuario.
+Genera un código de verificación para el registro de un usuario. Y envia el correo para
 
 **Parámetros de Body**
 ```json
 {
-    "correo": ""
+    "correo": "",
+    "nombre": ""
 }
 ```
 
@@ -199,15 +315,14 @@ Genera un código de verificación para el registro de un usuario.
 - `200`
 ```json
 {
-    "code": "",
-    "valid_until": 0
+    "valid_until": 0,
+    "emailMsg": ""
 }
 ```
 - `400`
 ```json
 {
     "error": "Code already generated.",
-    "code": "",
 }
 ```
 ## /verify-code

@@ -4,11 +4,16 @@ import dotenv from 'dotenv';
 import { ResultSetHeader } from 'mysql2';
 import { Connection } from 'mysql2/promise';
 import { SendEmail } from './EmailSender';
+import fs from "node:fs"
+import cors from 'cors';
 
-//INTERFACES
-import { Usuario, Concurso, Params } from './interfaces/interfaces';
 
 const app = express();
+//INTERFACES
+import { Usuario, Concurso, Params } from './interfaces/interfaces';
+app.use(cors());
+
+
 const PORT = 4000;
 
 app.use(express.json())
@@ -53,14 +58,14 @@ app.put('/update-password/:id', async (req, res) => {
 //Ruta para los correos
 // * Documentada
 app.post('/send-email', async (req: Request<{}, {}, Params>, res: Response) => {
-    const { subject, to, senderemail, htmlContent } = req.body;
+    const { subject, to, htmlContent } = req.body;
 
-    if (!subject || !to || !senderemail || !htmlContent) {
+    if (!subject || !to || !htmlContent) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
 
     try {
-        await SendEmail({ subject, to, senderemail, htmlContent });
+        await SendEmail({ subject, to, htmlContent });
         return res.status(200).json({ message: 'Email sent successfully' });
     } catch (error) {
         console.error('Failed to send email:', error);
@@ -109,6 +114,133 @@ app.post('/create-contest', async (req: Request<{}, {}, Concurso>, res: Response
         return res.status(500).json({ error: 'Database operation failed' });
     }
 });
+
+// RUTA PARA BUSCAR CONCURSOS SEGÚN UNA PALABRA O FRASE EN EL NOMBRE
+// * Documentada
+app.get('/search-contests-by-name/:palabra', async (req: Request, res: Response) => {
+    const { palabra } = req.params;
+
+    if (!palabra) {
+        return res.status(400).json({ error: 'Missing search query' });
+    }
+    try {
+        const searchQuery = `%${palabra}%`;
+        const sqlQuery = `
+            SELECT * FROM Concurso
+            WHERE nombre LIKE ?
+            ORDER BY fecha_inicio DESC;
+        `;
+
+        const [rows] = await connection.execute(sqlQuery, [searchQuery]);
+
+        if ((rows as Array<any>).length === 0) {
+            return res.status(404).json({ error: 'No contests found' });
+        }
+
+        return res.status(200).json(rows);
+    } catch (error) {
+        console.error('Database operation failed:', error);
+        return res.status(500).json({ error: 'Database operation failed' });
+    }
+});
+
+
+//RUTA PARA FILTRAR EN BASE A SOLO LOS QUE EL USUARIO PUEDE VER
+app.get('/contests-for-user/:userId', async (req: Request, res: Response) => {
+    const { userId } = req.params;
+
+    try {
+        // Obtener el tipo de usuario (interno o externo)
+        const userQuery = `SELECT tipo FROM Usuario WHERE id = ?`;
+        const [userRows] = await connection.execute(userQuery, [userId]);
+
+        if ((userRows as Array<any>).length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const userType = (userRows as Array<any>)[0].tipo; // 0 = interno, 1 = externo
+
+        // Definir la consulta SQL en base al tipo de usuario
+        let contestQuery = '';
+        let queryParams: any[] = [];
+
+        if (userType === 0) { // Interno, obtiene todos los concursos
+            contestQuery = `
+                SELECT * FROM Concurso
+                ORDER BY fecha_inicio DESC;
+            `;
+        } else if (userType === 1) { // Externo, solo obtiene concursos externos
+            contestQuery = `
+                SELECT * FROM Concurso
+                WHERE interno = 0
+                ORDER BY fecha_inicio DESC;
+            `;
+        }
+
+        const [contestRows] = await connection.execute(contestQuery, queryParams);
+
+        if ((contestRows as Array<any>).length === 0) {
+            return res.status(404).json({ error: 'No contests found' });
+        }
+
+        return res.status(200).json(contestRows);
+    } catch (error) {
+        console.error('Database operation failed:', error);
+        return res.status(500).json({ error: 'Database operation failed' });
+    }
+});
+
+app.post('/add-participant', async (req: Request, res: Response) => {
+    const { user_id, concurso_id, equipo_id, rol } = req.body;
+
+    if (!user_id || !concurso_id) {
+        return res.status(400).json({ error: 'Missing user_id or concurso_id' });
+    }
+
+    try {
+        const sqlInsert = `
+            INSERT INTO Participante (user_id, concurso_id, equipo_id, rol)
+            VALUES (?, ?, ?, ?);
+        `;
+
+        await connection.execute(sqlInsert, [user_id, concurso_id, equipo_id || null, rol || null]);
+
+        return res.status(201).json({ message: 'Participant added successfully' });
+    } catch (error) {
+        console.error('Failed to insert participant:', error);
+        return res.status(500).json({ error: 'Failed to insert participant' });
+    }
+});
+
+app.get('/contests-by-user/:userId', async (req: Request, res: Response) => {
+    const { userId } = req.params;
+
+    if (!userId) {
+        return res.status(400).json({ error: 'Missing user ID' });
+    }
+
+    try {
+        const sqlQuery = `
+            SELECT C.*
+            FROM Concurso C
+            INNER JOIN Participante P ON C.id = P.concurso_id
+            WHERE P.user_id = ?
+            ORDER BY C.fecha_inicio DESC;
+        `;
+
+        const [rows] = await connection.execute(sqlQuery, [userId]);
+
+        if ((rows as Array<any>).length === 0) {
+            return res.status(404).json({ error: 'No contests found for this user' });
+        }
+
+        return res.status(200).json(rows);
+    } catch (error) {
+        console.error('Database operation failed:', error);
+        return res.status(500).json({ error: 'Database operation failed' });
+    }
+});
+
 //Ruta para desactivar cuentas de usuarios en base a su ID
 // * Documentada
 app.put('/deactivate-user/:id', async (req, res) => {
@@ -240,8 +372,8 @@ app.post('/add-user', async (req: Request<{}, {}, Omit<Usuario, 'id'>>, res: Res
 Genera un código de verificación de 6 dígitos y lo asocia a un correo.
 */
 //* Documentada
-app.post("/gen-code", async (req: Request<{}, {}, { correo: string }>, res: Response) => {
-    const { correo } = req.body;
+app.post("/gen-code", async (req: Request<{}, {}, { correo: string, nombre: string }>, res: Response) => {
+    const { correo, nombre } = req.body;
 
     if (correo === undefined) {
         return res.status(400).json({
@@ -265,7 +397,32 @@ app.post("/gen-code", async (req: Request<{}, {}, { correo: string }>, res: Resp
     codes.set(correo, newCodeData);
 
     console.log(codes)
-    return res.status(200).json(newCodeData);
+
+    // open and read contents of emailVerify.html
+    let htmlContent = fs.readFileSync("./src/emailVerify.html", 'utf-8')
+    // set html content in one line
+    htmlContent = htmlContent.replace(/\n/g, "").replace(/\t/g, "").replace(/\r/g, "")
+    htmlContent = htmlContent.replace("{name}", nombre)
+    htmlContent = htmlContent.replace("{code}", code)
+
+    const subject = "[WEBHUB] Verificación de Correo"
+    // para enviar un msg en el response relacionado al correo
+    let emailMsg = ""
+    let to = [{ email: correo, name: "name" }]
+    // Enviar codigo por correo
+    try {
+        await SendEmail({ subject, to, htmlContent } as Params);
+        emailMsg = "Email sent successfully."
+    } catch (error) {
+        console.error('Failed to send email:', error);
+        emailMsg = "Failed to send email: " + error
+    }
+
+    let out = {
+        message: emailMsg,
+        valid_until: valid_until
+    }
+    return res.status(200).json(out);
 });
 
 //* Documentada
@@ -284,6 +441,30 @@ app.post("/verify-code", async (req: Request<{}, {}, { correo: string, code: str
 
     return res.status(200).json({ valid: codeData.code === code });
 });
+
+app.put('/update-banner/:id', async (req: Request<{ id: string }, {}, { banner: Buffer }>, res: Response) => {
+    const { id } = req.params;
+    const { banner } = req.body;
+
+    if (!banner) {
+        return res.status(400).json({ error: 'No banner' });
+    }
+
+    try {
+        const query = `UPDATE Concurso SET banner = ? WHERE id = ?`;
+        const [result]: any = await connection.execute(query, [banner, id]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Contest not found' });
+        }
+
+        return res.status(200).json({ message: 'Banner updated successfully' });
+    } catch (error) {
+        console.error('Database operation failed:', error);
+        return res.status(500).json({ error: 'Database operation failed' });
+    }
+});
+
 
 // Conectarse a la base de datos y reutilizar la conexión en todas las rutas
 connectionSetup().then(
